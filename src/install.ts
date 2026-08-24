@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { access, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 import * as toolCache from "@actions/tool-cache";
@@ -15,33 +15,6 @@ export interface InstallResult {
   path: string;
   version: string;
   cacheHit: boolean;
-}
-
-async function findExecutableIn(
-  root: string,
-  name: string,
-): Promise<string | undefined> {
-  const entries = await readdir(root, { withFileTypes: true });
-  for (const entry of entries) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      const found = await findExecutableIn(path, name);
-      if (found) {
-        return found;
-      }
-    } else if (entry.isFile() && entry.name === name) {
-      return path;
-    }
-  }
-  return undefined;
-}
-
-async function findExecutable(root: string, name: string): Promise<string> {
-  const path = await findExecutableIn(root, name);
-  if (path) {
-    return path;
-  }
-  throw new Error(`Could not find ${name} in the extracted release archive.`);
 }
 
 async function verifyInstalledVersion(
@@ -65,14 +38,24 @@ async function verifyInstalledVersion(
 export async function installRelease(
   release: ResolvedRelease,
   target: PlatformTarget,
+  token: string,
 ): Promise<InstallResult> {
   let cachedPath = toolCache.find("mohub", release.version, target.target);
   const cacheHit = cachedPath !== "";
 
   if (!cacheHit) {
+    const auth = token ? `token ${token}` : undefined;
     const [archivePath, checksumPath] = await Promise.all([
-      toolCache.downloadTool(release.archive.browser_download_url),
-      toolCache.downloadTool(release.checksum.browser_download_url),
+      toolCache.downloadTool(
+        release.archive.browser_download_url,
+        undefined,
+        auth,
+      ),
+      toolCache.downloadTool(
+        release.checksum.browser_download_url,
+        undefined,
+        auth,
+      ),
     ]);
     const expectedChecksum = parseSha256(await readFile(checksumPath, "utf8"));
     await verifySha256(archivePath, expectedChecksum);
@@ -81,19 +64,26 @@ export async function installRelease(
       target.archiveExtension === ".zip"
         ? await toolCache.extractZip(archivePath)
         : await toolCache.extractTar(archivePath);
+    const toolPath =
+      target.archiveExtension === ".zip"
+        ? extractedPath
+        : join(extractedPath, `mohub-${target.target}`);
     cachedPath = await toolCache.cacheDir(
-      extractedPath,
+      toolPath,
       "mohub",
       release.version,
       target.target,
     );
   }
 
-  const path = await findExecutable(cachedPath, target.executable);
+  const path = join(cachedPath, target.executable);
+  try {
+    await access(path);
+  } catch {
+    throw new Error(
+      `Could not find ${target.executable} in the release archive.`,
+    );
+  }
   await verifyInstalledVersion(path, release.version);
   return { path, version: release.version, cacheHit };
-}
-
-export function executableDirectory(result: InstallResult): string {
-  return dirname(result.path);
 }

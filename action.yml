@@ -12,7 +12,7 @@ inputs:
     required: false
     default: latest
   github-token:
-    description: GitHub token used to resolve marimohub releases
+    description: GitHub token used to resolve and download marimohub releases
     required: false
     default: ${{ github.token }}
 

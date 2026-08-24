@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
+import { dirname } from "node:path";
 
-import { executableDirectory, installRelease } from "./install.js";
+import { installRelease } from "./install.js";
 import { platformTarget } from "./platform.js";
 import { resolveRelease } from "./release.js";
 import { normalizeRequestedVersion } from "./version.js";
@@ -17,9 +18,9 @@ async function run(): Promise<void> {
     `Resolving ${requestedVersion === "latest" ? "the latest mohub release" : `mohub v${requestedVersion}`} for ${target.target}.`,
   );
   const release = await resolveRelease(requestedVersion, target, token);
-  const result = await installRelease(release, target);
+  const result = await installRelease(release, target, token);
 
-  core.addPath(executableDirectory(result));
+  core.addPath(dirname(result.path));
   core.setOutput("mohub-version", result.version);
   core.setOutput("mohub-path", result.path);
   core.info(

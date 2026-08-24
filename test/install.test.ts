@@ -1,4 +1,5 @@
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -40,12 +41,21 @@ describe("installation", () => {
     await chmod(executable, 0o755);
     vi.mocked(toolCache.find).mockReturnValue(directory);
 
-    await expect(installRelease(release, target)).resolves.toEqual({
+    await expect(installRelease(release, target, "")).resolves.toEqual({
       path: executable,
       version: "0.3.6",
       cacheHit: true,
     });
     expect(toolCache.downloadTool).not.toHaveBeenCalled();
+  });
+
+  it("reports a missing executable in the cached archive", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "setup-marimohub-cli-"));
+    vi.mocked(toolCache.find).mockReturnValue(directory);
+
+    await expect(installRelease(release, target, "")).rejects.toThrow(
+      "Could not find mohub in the release archive",
+    );
   });
 
   it("rejects tampering before extracting or caching", async () => {
@@ -59,10 +69,58 @@ describe("installation", () => {
       .mockResolvedValueOnce(archive)
       .mockResolvedValueOnce(checksum);
 
-    await expect(installRelease(release, target)).rejects.toThrow(
+    await expect(installRelease(release, target, "")).rejects.toThrow(
       "Checksum verification failed",
     );
     expect(toolCache.extractTar).not.toHaveBeenCalled();
     expect(toolCache.cacheDir).not.toHaveBeenCalled();
+  });
+
+  it("installs the known cargo-dist layout with authenticated downloads", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "setup-marimohub-cli-"));
+    const archive = join(directory, "archive.tar.gz");
+    const checksum = join(directory, "archive.tar.gz.sha256");
+    const extracted = join(directory, "extracted");
+    const toolDirectory = join(extracted, "mohub-x86_64-unknown-linux-gnu");
+    const executable = join(toolDirectory, "mohub");
+    await writeFile(archive, "archive contents");
+    const digest = createHash("sha256")
+      .update("archive contents")
+      .digest("hex");
+    await writeFile(checksum, `${digest}  archive.tar.gz\n`);
+    await mkdir(toolDirectory, { recursive: true });
+    await writeFile(executable, "#!/bin/sh\necho 'mohub 0.3.6'\n");
+    await chmod(executable, 0o755);
+
+    vi.mocked(toolCache.find).mockReturnValue("");
+    vi.mocked(toolCache.downloadTool)
+      .mockResolvedValueOnce(archive)
+      .mockResolvedValueOnce(checksum);
+    vi.mocked(toolCache.extractTar).mockResolvedValue(extracted);
+    vi.mocked(toolCache.cacheDir).mockResolvedValue(toolDirectory);
+
+    await expect(installRelease(release, target, "secret")).resolves.toEqual({
+      path: executable,
+      version: "0.3.6",
+      cacheHit: false,
+    });
+    expect(toolCache.downloadTool).toHaveBeenNthCalledWith(
+      1,
+      release.archive.browser_download_url,
+      undefined,
+      "token secret",
+    );
+    expect(toolCache.downloadTool).toHaveBeenNthCalledWith(
+      2,
+      release.checksum.browser_download_url,
+      undefined,
+      "token secret",
+    );
+    expect(toolCache.cacheDir).toHaveBeenCalledWith(
+      toolDirectory,
+      "mohub",
+      "0.3.6",
+      "x86_64-unknown-linux-gnu",
+    );
   });
 });

@@ -12,13 +12,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  MOHUB_TEST_VERSION: "0.3.6" # renovate: datasource=github-releases depName=marimo-team/marimohub
+
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -47,27 +50,27 @@ jobs:
           - macos-15
           - windows-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install mohub
         id: setup
         uses: ./
         with:
-          version: "0.3.6"
+          version: ${{ env.MOHUB_TEST_VERSION }}
       - name: Verify installation
         shell: pwsh
         env:
           MOHUB_VERSION: ${{ steps.setup.outputs.mohub-version }}
           MOHUB_PATH: ${{ steps.setup.outputs.mohub-path }}
         run: |
-          if ($env:MOHUB_VERSION -ne '0.3.6') { throw "Unexpected output version: $env:MOHUB_VERSION" }
+          if ($env:MOHUB_VERSION -ne $env:MOHUB_TEST_VERSION) { throw "Unexpected output version: $env:MOHUB_VERSION" }
           if (-not (Test-Path -LiteralPath $env:MOHUB_PATH)) { throw "Missing executable: $env:MOHUB_PATH" }
-          if ((mohub --version) -ne 'mohub 0.3.6') { throw 'mohub --version did not match' }
+          if ((mohub --version) -ne "mohub $env:MOHUB_TEST_VERSION") { throw 'mohub --version did not match' }
 
   latest:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install latest mohub
         id: setup
         uses: ./

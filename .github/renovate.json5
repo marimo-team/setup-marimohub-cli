@@ -1,0 +1,39 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
+  dependencyDashboard: true,
+  minimumReleaseAge: "3 days",
+  labels: ["dependencies"],
+  packageRules: [
+    {
+      matchManagers: ["npm"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "npm non-major dependencies",
+    },
+    {
+      matchManagers: ["github-actions"],
+      groupName: "GitHub Actions",
+    },
+  ],
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
+      matchStrings: [
+        'MOHUB_TEST_VERSION:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"\\s*# renovate: datasource=github-releases depName=marimo-team/marimohub',
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "marimo-team/marimohub",
+      versioningTemplate: "semver",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github\\/workflows\\/.+\\.yml$/"],
+      matchStrings: [
+        "rhysd/actionlint:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)",
+      ],
+      datasourceTemplate: "docker",
+      depNameTemplate: "rhysd/actionlint",
+    },
+  ],
+}
