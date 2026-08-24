@@ -11,6 +11,11 @@
       groupName: "npm non-major dependencies",
     },
     {
+      description: "Keep TypeScript compatible with @vercel/ncc 0.45",
+      matchPackageNames: ["typescript"],
+      allowedVersions: "<7",
+    },
+    {
       matchManagers: ["github-actions"],
       groupName: "GitHub Actions",
     },
