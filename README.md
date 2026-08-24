@@ -59,7 +59,6 @@ jobs:
     env:
       MARIMOHUB_URL: ${{ vars.MARIMOHUB_URL }}
       MARIMOHUB_TOKEN: ${{ secrets.MARIMOHUB_TOKEN }}
-      MARIMOHUB_NO_UPDATE_CHECK: "1"
       MARIMOHUB_PROJECT_ID: ${{ vars.MARIMOHUB_PROJECT_ID }}
       MARIMOHUB_NOTEBOOK_ID: ${{ vars.MARIMOHUB_NOTEBOOK_ID }}
     steps:
