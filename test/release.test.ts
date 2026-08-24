@@ -79,4 +79,20 @@ describe("release resolution", () => {
       resolveRelease("0.3.6", target, "", { fetch: fetchMock, attempts: 1 }),
     ).rejects.toThrow("when v0.3.6 was requested");
   });
+
+  it("does not retry permanent API failures", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("forbidden", { status: 403 }));
+    const sleep = vi.fn(async () => undefined);
+
+    await expect(
+      resolveRelease("0.3.5", target, "", {
+        fetch: fetchMock,
+        sleep,
+      }),
+    ).rejects.toThrow("HTTP 403");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
 });

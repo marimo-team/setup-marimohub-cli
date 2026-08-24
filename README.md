@@ -82,6 +82,12 @@ current notebook is a no-op.
 For production, put the variables and secret in a protected GitHub Environment and attach that
 environment to the job.
 
+## Development
+
+GitHub runs `dist/index.js` directly, so the bundled `dist/` directory is committed. After changing
+the source or dependencies, run `npm run build` and include the resulting bundle in the same pull
+request. CI rebuilds the action and rejects bundle drift.
+
 ## License
 
 [Apache License 2.0](LICENSE)

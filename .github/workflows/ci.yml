@@ -12,6 +12,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  MOHUB_TEST_VERSION: "0.3.6" # renovate: datasource=github-releases depName=marimo-team/marimohub
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -52,16 +55,16 @@ jobs:
         id: setup
         uses: ./
         with:
-          version: "0.3.6"
+          version: ${{ env.MOHUB_TEST_VERSION }}
       - name: Verify installation
         shell: pwsh
         env:
           MOHUB_VERSION: ${{ steps.setup.outputs.mohub-version }}
           MOHUB_PATH: ${{ steps.setup.outputs.mohub-path }}
         run: |
-          if ($env:MOHUB_VERSION -ne '0.3.6') { throw "Unexpected output version: $env:MOHUB_VERSION" }
+          if ($env:MOHUB_VERSION -ne $env:MOHUB_TEST_VERSION) { throw "Unexpected output version: $env:MOHUB_VERSION" }
           if (-not (Test-Path -LiteralPath $env:MOHUB_PATH)) { throw "Missing executable: $env:MOHUB_PATH" }
-          if ((mohub --version) -ne 'mohub 0.3.6') { throw 'mohub --version did not match' }
+          if ((mohub --version) -ne "mohub $env:MOHUB_TEST_VERSION") { throw 'mohub --version did not match' }
 
   latest:
     runs-on: ubuntu-latest

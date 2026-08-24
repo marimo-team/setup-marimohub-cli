@@ -34004,12 +34004,12 @@ function getIDToken(aud) {
  */
 
 //# sourceMappingURL=core.js.map
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
 ;// CONCATENATED MODULE: external "node:fs/promises"
 const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 // EXTERNAL MODULE: external "node:util"
 var external_node_util_ = __nccwpck_require__(7975);
 // EXTERNAL MODULE: ./node_modules/semver/index.js
@@ -34849,29 +34849,6 @@ async function verifySha256(path, expected) {
 
 
 const execFileAsync = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
-async function findExecutableIn(root, name) {
-    const entries = await (0,promises_namespaceObject.readdir)(root, { withFileTypes: true });
-    for (const entry of entries) {
-        const path = (0,external_node_path_namespaceObject.join)(root, entry.name);
-        if (entry.isDirectory()) {
-            const found = await findExecutableIn(path, name);
-            if (found) {
-                return found;
-            }
-        }
-        else if (entry.isFile() && entry.name === name) {
-            return path;
-        }
-    }
-    return undefined;
-}
-async function findExecutable(root, name) {
-    const path = await findExecutableIn(root, name);
-    if (path) {
-        return path;
-    }
-    throw new Error(`Could not find ${name} in the extracted release archive.`);
-}
 async function verifyInstalledVersion(path, expected) {
     const { stdout } = await execFileAsync(path, ["--version"]);
     const match = /^mohub\s+(\d+\.\d+\.\d+)\s*$/.exec(stdout);
@@ -34882,27 +34859,34 @@ async function verifyInstalledVersion(path, expected) {
         throw new Error(`Installed mohub version ${match[1]} does not match requested version ${expected}.`);
     }
 }
-async function installRelease(release, target) {
+async function installRelease(release, target, token) {
     let cachedPath = find("mohub", release.version, target.target);
     const cacheHit = cachedPath !== "";
     if (!cacheHit) {
+        const auth = token ? `token ${token}` : undefined;
         const [archivePath, checksumPath] = await Promise.all([
-            downloadTool(release.archive.browser_download_url),
-            downloadTool(release.checksum.browser_download_url),
+            downloadTool(release.archive.browser_download_url, undefined, auth),
+            downloadTool(release.checksum.browser_download_url, undefined, auth),
         ]);
         const expectedChecksum = parseSha256(await (0,promises_namespaceObject.readFile)(checksumPath, "utf8"));
         await verifySha256(archivePath, expectedChecksum);
         const extractedPath = target.archiveExtension === ".zip"
             ? await extractZip(archivePath)
             : await extractTar(archivePath);
-        cachedPath = await cacheDir(extractedPath, "mohub", release.version, target.target);
+        const toolPath = target.archiveExtension === ".zip"
+            ? extractedPath
+            : (0,external_node_path_namespaceObject.join)(extractedPath, `mohub-${target.target}`);
+        cachedPath = await cacheDir(toolPath, "mohub", release.version, target.target);
     }
-    const path = await findExecutable(cachedPath, target.executable);
+    const path = (0,external_node_path_namespaceObject.join)(cachedPath, target.executable);
+    try {
+        await (0,promises_namespaceObject.access)(path);
+    }
+    catch {
+        throw new Error(`Could not find ${target.executable} in the release archive.`);
+    }
     await verifyInstalledVersion(path, release.version);
     return { path, version: release.version, cacheHit };
-}
-function executableDirectory(result) {
-    return (0,external_node_path_namespaceObject.dirname)(result.path);
 }
 
 ;// CONCATENATED MODULE: ./src/platform.ts
@@ -34970,6 +34954,9 @@ function versionFromTag(tag) {
 
 
 const API_ROOT = "https://api.github.com/repos/marimo-team/marimohub/releases";
+const LOOKUP_TIMEOUT_MS = 10_000;
+class RetryableReleaseError extends Error {
+}
 function endpoint(version) {
     return version === "latest"
         ? `${API_ROOT}/latest`
@@ -34984,9 +34971,18 @@ async function fetchRelease(version, token, fetchImpl) {
     if (token) {
         headers.Authorization = `Bearer ${token}`;
     }
-    const response = await fetchImpl(endpoint(version), { headers });
+    const response = await fetchImpl(endpoint(version), {
+        headers,
+        signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+    });
     if (!response.ok) {
-        throw new Error(`GitHub release lookup failed with HTTP ${response.status} for ${version === "latest" ? "the latest release" : `v${version}`}.`);
+        const ErrorType = response.status === 404 ||
+            response.status === 408 ||
+            response.status === 429 ||
+            response.status >= 500
+            ? RetryableReleaseError
+            : Error;
+        throw new ErrorType(`GitHub release lookup failed with HTTP ${response.status} for ${version === "latest" ? "the latest release" : `v${version}`}.`);
     }
     return (await response.json());
 }
@@ -35002,7 +34998,7 @@ function selectReleaseAssets(release, target) {
             archive ? undefined : name,
             checksum ? undefined : `${name}.sha256`,
         ].filter((value) => value !== undefined);
-        throw new Error(`Release ${release.tag_name} is missing required asset(s): ${missing.join(", ")}.`);
+        throw new RetryableReleaseError(`Release ${release.tag_name} is missing required asset(s): ${missing.join(", ")}.`);
     }
     return {
         version: versionFromTag(release.tag_name),
@@ -35028,15 +35024,21 @@ async function resolveRelease(requestedVersion, target, token, options = {}) {
         }
         catch (error) {
             lastError = error;
-            if (attempt < attempts) {
-                await sleep(1000 * 2 ** (attempt - 1));
+            const isNetworkError = error instanceof TypeError ||
+                (error instanceof Error &&
+                    (error.name === "AbortError" || error.name === "TimeoutError"));
+            if (attempt === attempts ||
+                (!(error instanceof RetryableReleaseError) && !isNetworkError)) {
+                throw error;
             }
+            await sleep(1000 * 2 ** (attempt - 1));
         }
     }
     throw lastError;
 }
 
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -35051,8 +35053,8 @@ async function run() {
     const target = platformTarget(process.platform, process.arch);
     info(`Resolving ${requestedVersion === "latest" ? "the latest mohub release" : `mohub v${requestedVersion}`} for ${target.target}.`);
     const release = await resolveRelease(requestedVersion, target, token);
-    const result = await installRelease(release, target);
-    addPath(executableDirectory(result));
+    const result = await installRelease(release, target, token);
+    addPath((0,external_node_path_namespaceObject.dirname)(result.path));
     setOutput("mohub-version", result.version);
     setOutput("mohub-path", result.path);
     info(`${result.cacheHit ? "Found" : "Installed"} mohub v${result.version} at ${result.path}.`);

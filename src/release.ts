@@ -2,6 +2,9 @@ import { archiveName, type PlatformTarget } from "./platform.js";
 import { versionFromTag } from "./version.js";
 
 const API_ROOT = "https://api.github.com/repos/marimo-team/marimohub/releases";
+const LOOKUP_TIMEOUT_MS = 10_000;
+
+class RetryableReleaseError extends Error {}
 
 export interface ReleaseAsset {
   name: string;
@@ -47,9 +50,19 @@ async function fetchRelease(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetchImpl(endpoint(version), { headers });
+  const response = await fetchImpl(endpoint(version), {
+    headers,
+    signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+  });
   if (!response.ok) {
-    throw new Error(
+    const ErrorType =
+      response.status === 404 ||
+      response.status === 408 ||
+      response.status === 429 ||
+      response.status >= 500
+        ? RetryableReleaseError
+        : Error;
+    throw new ErrorType(
       `GitHub release lookup failed with HTTP ${response.status} for ${version === "latest" ? "the latest release" : `v${version}`}.`,
     );
   }
@@ -76,7 +89,7 @@ export function selectReleaseAssets(
       archive ? undefined : name,
       checksum ? undefined : `${name}.sha256`,
     ].filter((value): value is string => value !== undefined);
-    throw new Error(
+    throw new RetryableReleaseError(
       `Release ${release.tag_name} is missing required asset(s): ${missing.join(", ")}.`,
     );
   }
@@ -117,9 +130,17 @@ export async function resolveRelease(
       return resolved;
     } catch (error) {
       lastError = error;
-      if (attempt < attempts) {
-        await sleep(1000 * 2 ** (attempt - 1));
+      const isNetworkError =
+        error instanceof TypeError ||
+        (error instanceof Error &&
+          (error.name === "AbortError" || error.name === "TimeoutError"));
+      if (
+        attempt === attempts ||
+        (!(error instanceof RetryableReleaseError) && !isNetworkError)
+      ) {
+        throw error;
       }
+      await sleep(1000 * 2 ** (attempt - 1));
     }
   }
 
