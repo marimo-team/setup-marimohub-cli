@@ -1,0 +1,27 @@
+name: Setup marimohub CLI
+description: Install the marimohub CLI and add it to PATH
+author: marimo team
+
+branding:
+  icon: terminal
+  color: purple
+
+inputs:
+  version:
+    description: Exact mohub version to install, or "latest"
+    required: false
+    default: latest
+  github-token:
+    description: GitHub token used to resolve marimohub releases
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  mohub-version:
+    description: Installed mohub version without a leading "v"
+  mohub-path:
+    description: Absolute path to the installed mohub executable
+
+runs:
+  using: node24
+  main: dist/index.js

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Check bundled action
+        run: |
+          npm run build
+          git diff --exit-code -- dist
+      - name: Check workflow files
+        run: >-
+          docker run --rm -v "$PWD:/repo" --workdir /repo
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
+  install:
+    name: Install (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-15-intel
+          - macos-15
+          - windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install mohub
+        id: setup
+        uses: ./
+        with:
+          version: "0.3.6"
+      - name: Verify installation
+        shell: pwsh
+        env:
+          MOHUB_VERSION: ${{ steps.setup.outputs.mohub-version }}
+          MOHUB_PATH: ${{ steps.setup.outputs.mohub-path }}
+        run: |
+          if ($env:MOHUB_VERSION -ne '0.3.6') { throw "Unexpected output version: $env:MOHUB_VERSION" }
+          if (-not (Test-Path -LiteralPath $env:MOHUB_PATH)) { throw "Missing executable: $env:MOHUB_PATH" }
+          if ((mohub --version) -ne 'mohub 0.3.6') { throw 'mohub --version did not match' }
+
+  latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install latest mohub
+        id: setup
+        uses: ./
+      - name: Verify outputs
+        env:
+          MOHUB_VERSION: ${{ steps.setup.outputs.mohub-version }}
+          MOHUB_PATH: ${{ steps.setup.outputs.mohub-path }}
+        run: |
+          test -n "$MOHUB_VERSION"
+          test -x "$MOHUB_PATH"
+          test "$(mohub --version)" = "mohub $MOHUB_VERSION"
+      - name: Verify cached installation
+        uses: ./
+        with:
+          version: ${{ steps.setup.outputs.mohub-version }}
