@@ -3,7 +3,7 @@
 Install the `mohub` command in a GitHub Actions job.
 
 ```yaml
-- uses: marimo-team/setup-marimohub-cli@v1
+- uses: marimo-team/setup-marimohub-cli@05c7d2bf3eb69f735ee6b56c7af9cfd10fe6678e # v1.0.0
   with:
     version: "0.3.6"
 
@@ -63,7 +63,7 @@ jobs:
       MARIMOHUB_PROJECT_ID: ${{ vars.MARIMOHUB_PROJECT_ID }}
       MARIMOHUB_NOTEBOOK_ID: ${{ vars.MARIMOHUB_NOTEBOOK_ID }}
     steps:
-      - uses: marimo-team/setup-marimohub-cli@v1
+      - uses: marimo-team/setup-marimohub-cli@05c7d2bf3eb69f735ee6b56c7af9cfd10fe6678e # v1.0.0
         with:
           version: "0.3.6"
 
