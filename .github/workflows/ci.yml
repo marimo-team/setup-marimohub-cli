@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  MOHUB_TEST_VERSION: "0.3.6" # renovate: datasource=github-releases depName=marimo-team/marimohub
+  MOHUB_TEST_VERSION: "0.3.12" # renovate: datasource=github-releases depName=marimo-team/marimohub
 
 jobs:
   check:
