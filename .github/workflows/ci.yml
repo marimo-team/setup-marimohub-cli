@@ -17,7 +17,7 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-p-small
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,14 +38,13 @@ jobs:
 
   install:
     name: Install (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner == 'ubuntu-latest' && 'ubuntu-p-small' || matrix.runner == 'windows-latest' && 'windows-medium' || matrix.runner }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         runner:
           - ubuntu-latest
-          - ubuntu-24.04-arm
           - macos-15-intel
           - macos-15
           - windows-latest
@@ -67,7 +66,7 @@ jobs:
           if ((mohub --version) -ne "mohub $env:MOHUB_TEST_VERSION") { throw 'mohub --version did not match' }
 
   latest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-p-small
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
